@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Skeleton } from '@databricks/appkit-ui/react';
 import { api, type TodayResponse, type ListSummary, type Task, type Effort, type Energy, type PlanDay } from '../lib/api';
 import { QuickAdd } from '../components/QuickAdd';
@@ -11,6 +11,11 @@ import { todayStr, EFFORT_LABELS } from '../lib/format';
 const EFFORTS: Effort[] = ['5m', '20m', '1h', 'deep'];
 const ENERGIES: Energy[] = ['low', 'medium', 'high'];
 
+// How long a just-completed task holds its slot before sinking below the open
+// ones. Long enough to see the strikethrough land on the row you actually
+// clicked, short enough that the plan doesn't feel stale.
+const SETTLE_MS = 2000;
+
 export function TodayPage() {
   const [data, setData] = useState<TodayResponse | null>(null);
   const [lists, setLists] = useState<ListSummary[]>([]);
@@ -19,6 +24,18 @@ export function TodayPage() {
   const [tag, setTag] = useState<string | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
+  const [settling, setSettling] = useState<number[]>([]);
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  // Keep a just-completed task rendering as if it were still open, so it stays
+  // put for a beat instead of leaping out from under the cursor.
+  const holdBriefly = (taskId: number) => {
+    setSettling((s) => (s.includes(taskId) ? s : [...s, taskId]));
+    timers.current.push(
+      window.setTimeout(() => setSettling((s) => s.filter((x) => x !== taskId)), SETTLE_MS)
+    );
+  };
 
   const refresh = useCallback(() => {
     const params = new URLSearchParams();
@@ -70,41 +87,76 @@ export function TodayPage() {
   const openDone = data.picks.filter((t) => t.status === 'done').length;
 
   // Plain render helpers (not components) so list identity stays stable.
-  const planRows = (tasks: Task[], day: PlanDay) => (
-    <SortableList ids={tasks.map((t) => t.id)} onReorder={(ids) => reorderPicks(ids, day)}>
-      {tasks.map((t) => (
-        <SortableRow key={t.id} id={t.id}>
-          <div className="flex items-center gap-1">
-            <div className="flex-1 min-w-0">
-              <TaskRow task={t} showList onChanged={refresh} onOpen={(x) => setOpenTaskId(x.id)} />
-            </div>
-            {t.status === 'open' && (
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-1.5 text-xs text-muted-foreground shrink-0"
-                  title={day === 'today' ? "Move to tomorrow's plan" : "Move to today's plan"}
-                  onClick={() => void movePlan(t, day, day === 'today' ? 'tomorrow' : 'today')}
-                >
-                  {day === 'today' ? '→ tmrw' : '→ today'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-1.5 text-xs text-muted-foreground shrink-0"
-                  title={`Remove from ${day === 'today' ? "today's" : "tomorrow's"} plan`}
-                  onClick={() => void removeFromPlan(t, day)}
-                >
-                  ✕
-                </Button>
-              </>
-            )}
+  const planRows = (tasks: Task[], day: PlanDay) => {
+    // Completed picks stay on the plan all day by design, but they sink below
+    // the open ones rather than sitting stranded mid-list. Display-only: the
+    // stored pick position never moves, so reopening restores the old slot.
+    const sunk = (t: Task) => t.status === 'done' && !settling.includes(t.id);
+    const active = tasks.filter((t) => !sunk(t));
+    const done = tasks.filter(sunk);
+
+    return (
+      <>
+        <SortableList
+          ids={active.map((t) => t.id)}
+          // PUT /today replaces the whole plan, so the completed picks have to
+          // ride along or a single drag would silently drop them from it.
+          onReorder={(ids) => reorderPicks([...ids, ...done.map((t) => t.id)], day)}
+        >
+          {active.map((t) => (
+            <SortableRow key={t.id} id={t.id}>
+              <div className="flex items-center gap-1">
+                <div className="flex-1 min-w-0">
+                  <TaskRow
+                    task={t}
+                    showList
+                    onChanged={refresh}
+                    onCompleted={holdBriefly}
+                    onOpen={(x) => setOpenTaskId(x.id)}
+                  />
+                </div>
+                {t.status === 'open' && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1.5 text-xs text-muted-foreground shrink-0"
+                      title={day === 'today' ? "Move to tomorrow's plan" : "Move to today's plan"}
+                      onClick={() => void movePlan(t, day, day === 'today' ? 'tomorrow' : 'today')}
+                    >
+                      {day === 'today' ? '→ tmrw' : '→ today'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1.5 text-xs text-muted-foreground shrink-0"
+                      title={`Remove from ${day === 'today' ? "today's" : "tomorrow's"} plan`}
+                      onClick={() => void removeFromPlan(t, day)}
+                    >
+                      ✕
+                    </Button>
+                  </>
+                )}
+              </div>
+            </SortableRow>
+          ))}
+        </SortableList>
+        {done.length > 0 && (
+          <div className={active.length > 0 ? 'mt-1 border-t pt-1' : undefined}>
+            {done.map((t) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                showList
+                onChanged={refresh}
+                onOpen={(x) => setOpenTaskId(x.id)}
+              />
+            ))}
           </div>
-        </SortableRow>
-      ))}
-    </SortableList>
-  );
+        )}
+      </>
+    );
+  };
 
   const feederRow = (t: Task) => (
     <div key={t.id} className="flex items-center gap-1">

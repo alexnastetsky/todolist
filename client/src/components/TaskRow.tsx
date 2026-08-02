@@ -9,12 +9,16 @@ export function TaskRow({
   task,
   onChanged,
   onOpen,
+  onCompleted,
   showList = false,
   canComplete = true,
 }: {
   task: Task;
   onChanged: () => void;
   onOpen: (task: Task) => void;
+  // Fired only when ticking a task off (never on reopen). The daily plan uses
+  // it to hold the row in place for a beat before it sinks below the open ones.
+  onCompleted?: (taskId: number) => void;
   showList?: boolean;
   canComplete?: boolean;
 }) {
@@ -25,7 +29,10 @@ export function TaskRow({
   const toggle = async () => {
     try {
       if (done) await api.post(`/tasks/${task.id}/reopen`);
-      else await api.post(`/tasks/${task.id}/complete`);
+      else {
+        await api.post(`/tasks/${task.id}/complete`);
+        onCompleted?.(task.id);
+      }
       onChanged();
     } catch {
       onChanged();

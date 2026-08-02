@@ -176,6 +176,17 @@ export const SETUP_SQL = `
     value      TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+
+  -- Written once per boot, as the last step of schema setup. A stale row means
+  -- this module could not reach its schema — which is invisible otherwise,
+  -- because the app still serves HTTP and starts "successfully". Each module
+  -- writes into its OWN schema on purpose: grants are per-schema, so one
+  -- combined heartbeat could go green while the other schema was unreachable.
+  CREATE TABLE IF NOT EXISTS todolist.app_heartbeat (
+    id INT PRIMARY KEY CHECK (id = 1),
+    beat_at TIMESTAMPTZ NOT NULL,
+    service_principal TEXT
+  );
 `;
 
 // Runs after SETUP_SQL; each entry executes exactly once per database (the

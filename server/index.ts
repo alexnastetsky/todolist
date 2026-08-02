@@ -54,7 +54,14 @@ export async function setupTodolistRoutes(appkit: TodoAppKit, { distPath }: Todo
         console.log(`[todolist] ran one-shot migration: ${m.key}`);
       }
     }
-    console.log('[todolist] schema ready');
+    // Last step, so a fresh row proves the whole setup path reached Postgres.
+    // npm run verify:deploy fails the deploy if this stays stale.
+    await appkit.lakebase.query(
+      `INSERT INTO todolist.app_heartbeat (id, beat_at, service_principal) VALUES (1, NOW(), $1)
+       ON CONFLICT (id) DO UPDATE SET beat_at = NOW(), service_principal = EXCLUDED.service_principal`,
+      [process.env.DATABRICKS_CLIENT_ID ?? null]
+    );
+    console.log('[todolist] schema ready, heartbeat written');
   } catch (err) {
     console.warn('[todolist] database setup failed:', (err as Error).message);
     console.warn('[todolist] routes will be registered but may return errors');

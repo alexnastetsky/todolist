@@ -170,6 +170,27 @@ export const SETUP_SQL = `
   -- above still gate email for events that pass.
   ALTER TABLE todolist.notification_prefs ADD COLUMN IF NOT EXISTS essential_only BOOLEAN NOT NULL DEFAULT TRUE;
 
+  -- Web Push, opt-in at the device level but ON here by default: a row only
+  -- exists in push_subscriptions once the user has granted permission on that
+  -- device, so this switch is the "mute push everywhere" escape hatch rather
+  -- than the thing that turns it on.
+  ALTER TABLE todolist.notification_prefs ADD COLUMN IF NOT EXISTS push_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+  -- One row per browser/device that granted notification permission. Keyed by
+  -- the push endpoint because that is what the push service treats as the
+  -- identity — the same person on phone and laptop is two rows. Rows are
+  -- deleted (not flagged) when the push service reports them gone.
+  CREATE TABLE IF NOT EXISTS todolist.push_subscriptions (
+    endpoint     TEXT PRIMARY KEY,
+    email        TEXT NOT NULL,
+    p256dh       TEXT NOT NULL,
+    auth         TEXT NOT NULL,
+    user_agent   TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_tl_push_email ON todolist.push_subscriptions(email);
+
   -- One-shot migration bookkeeping.
   CREATE TABLE IF NOT EXISTS todolist.app_meta (
     key        TEXT PRIMARY KEY,

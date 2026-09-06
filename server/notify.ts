@@ -1,5 +1,6 @@
 import { TodoAppKit, NotificationType } from './types';
 import { EmailSender, taskLink, listLink } from './email';
+import { sendPush } from './push';
 
 export interface NotifyEvent {
   recipient: string;
@@ -64,6 +65,24 @@ export async function notify(appkit: TodoAppKit, emailSender: EmailSender | null
       [recipient, ev.type, ev.taskId ?? null, ev.listId ?? null, ev.actor ?? null, ev.title, ev.dedupeKey ?? null]
     );
     if (inserted.rows.length === 0) return; // dedupe hit
+
+    // Push runs before the email early-returns below, so an installed phone
+    // still gets notified on a deployment with no email provider configured.
+    // Gated only by push_enabled — the dedupe and essential-only checks above
+    // already applied, so push obeys exactly the same rules as the bell.
+    const pushPref = await appkit.lakebase.query(
+      'SELECT push_enabled FROM todolist.notification_prefs WHERE email = $1',
+      [recipient]
+    );
+    if (pushPref.rows.length === 0 || pushPref.rows[0].push_enabled === true) {
+      await sendPush(appkit, recipient, {
+        title: ev.title,
+        url: taskLink(ev.taskId ?? null) ?? listLink(ev.listId ?? null) ?? undefined,
+        // Reuse the dedupe key so repeat notifications about one thing
+        // replace each other in the tray instead of stacking up.
+        tag: ev.dedupeKey ?? undefined,
+      });
+    }
 
     if (!emailSender) return;
     if (!ev.forceEmail) {

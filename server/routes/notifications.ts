@@ -2,10 +2,24 @@ import { z } from 'zod';
 import { Application } from 'express';
 import { TodoContext } from '../types';
 import { handleError } from '../auth';
+import { pushPublicKey } from '../push';
 
 const ReadBody = z.object({
   ids: z.array(z.number().int()).max(500).optional(),
   all: z.boolean().optional(),
+});
+
+// Shape produced by PushSubscription.toJSON() in the browser.
+const SubscribeBody = z.object({
+  endpoint: z.string().url().max(2000),
+  keys: z.object({
+    p256dh: z.string().max(200),
+    auth: z.string().max(200),
+  }),
+});
+
+const UnsubscribeBody = z.object({
+  endpoint: z.string().url().max(2000),
 });
 
 export function registerNotificationRoutes(app: Application, ctx: TodoContext) {
@@ -30,6 +44,61 @@ export function registerNotificationRoutes(app: Application, ctx: TodoContext) {
       res.json(rows);
     } catch (err) {
       handleError(res, 'Failed to load notifications', err);
+    }
+  });
+
+  // The VAPID public key the browser needs to subscribe. Null when push is not
+  // configured, which the settings UI shows as "unavailable" rather than
+  // offering a switch that cannot work.
+  app.get('/todolist/api/push/key', (_req, res) => {
+    res.json({ key: pushPublicKey() });
+  });
+
+  app.post('/todolist/api/push/subscribe', async (req, res) => {
+    try {
+      const parsed = SubscribeBody.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid subscription' });
+        return;
+      }
+      const email = res.locals.email as string;
+      const { endpoint, keys } = parsed.data;
+      // Endpoints are re-issued by the push service over time, and the same
+      // endpoint can move between accounts on a shared device — so upsert on
+      // the endpoint and let the newest owner win.
+      await appkit.lakebase.query(
+        `INSERT INTO todolist.push_subscriptions (endpoint, email, p256dh, auth, user_agent)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (endpoint) DO UPDATE SET
+           email = EXCLUDED.email,
+           p256dh = EXCLUDED.p256dh,
+           auth = EXCLUDED.auth,
+           user_agent = EXCLUDED.user_agent,
+           last_seen_at = NOW()`,
+        [endpoint, email, keys.p256dh, keys.auth, req.header('user-agent') ?? null]
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      handleError(res, 'Failed to save push subscription', err);
+    }
+  });
+
+  app.post('/todolist/api/push/unsubscribe', async (req, res) => {
+    try {
+      const parsed = UnsubscribeBody.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid subscription' });
+        return;
+      }
+      const email = res.locals.email as string;
+      // Scoped to the caller so one account cannot drop another's device.
+      await appkit.lakebase.query('DELETE FROM todolist.push_subscriptions WHERE endpoint = $1 AND email = $2', [
+        parsed.data.endpoint,
+        email,
+      ]);
+      res.json({ ok: true });
+    } catch (err) {
+      handleError(res, 'Failed to remove push subscription', err);
     }
   });
 

@@ -12,6 +12,7 @@ const PrefsBody = z.object({
   emailCompleted: z.boolean().optional(),
   emailDueToday: z.boolean().optional(),
   essentialOnly: z.boolean().optional(),
+  pushEnabled: z.boolean().optional(),
 });
 
 export function registerMeRoutes(app: Application, ctx: TodoContext) {
@@ -27,7 +28,8 @@ export function registerMeRoutes(app: Application, ctx: TodoContext) {
       );
       const user = await appkit.lakebase.query('SELECT display_name FROM todolist.users WHERE email = $1', [email]);
       const prefs = await appkit.lakebase.query(
-        `SELECT email_assigned, email_shared, email_comment, email_completed, email_due_today, essential_only
+        `SELECT email_assigned, email_shared, email_comment, email_completed, email_due_today, essential_only,
+                push_enabled
          FROM todolist.notification_prefs WHERE email = $1`,
         [email]
       );
@@ -45,6 +47,7 @@ export function registerMeRoutes(app: Application, ctx: TodoContext) {
           email_completed: true,
           email_due_today: true,
           essential_only: true,
+          push_enabled: true,
         },
         emailConfigured: ctx.emailSender !== null,
         unreadCount: (unread.rows[0] as { n: number }).n,
@@ -72,8 +75,10 @@ export function registerMeRoutes(app: Application, ctx: TodoContext) {
       }
       await appkit.lakebase.query(
         `INSERT INTO todolist.notification_prefs
-           (email, email_assigned, email_shared, email_comment, email_completed, email_due_today, essential_only)
-         VALUES ($1, COALESCE($2, TRUE), COALESCE($3, TRUE), COALESCE($4, TRUE), COALESCE($5, TRUE), COALESCE($6, TRUE), COALESCE($7, TRUE))
+           (email, email_assigned, email_shared, email_comment, email_completed, email_due_today, essential_only,
+            push_enabled)
+         VALUES ($1, COALESCE($2, TRUE), COALESCE($3, TRUE), COALESCE($4, TRUE), COALESCE($5, TRUE), COALESCE($6, TRUE), COALESCE($7, TRUE),
+                 COALESCE($8, TRUE))
          ON CONFLICT (email) DO UPDATE SET
            email_assigned  = COALESCE($2, todolist.notification_prefs.email_assigned),
            email_shared    = COALESCE($3, todolist.notification_prefs.email_shared),
@@ -81,6 +86,7 @@ export function registerMeRoutes(app: Application, ctx: TodoContext) {
            email_completed = COALESCE($5, todolist.notification_prefs.email_completed),
            email_due_today = COALESCE($6, todolist.notification_prefs.email_due_today),
            essential_only  = COALESCE($7, todolist.notification_prefs.essential_only),
+           push_enabled    = COALESCE($8, todolist.notification_prefs.push_enabled),
            updated_at = NOW()`,
         [
           email,
@@ -90,6 +96,7 @@ export function registerMeRoutes(app: Application, ctx: TodoContext) {
           b.emailCompleted ?? null,
           b.emailDueToday ?? null,
           b.essentialOnly ?? null,
+          b.pushEnabled ?? null,
         ]
       );
       res.json({ ok: true });

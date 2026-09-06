@@ -82,6 +82,7 @@ export interface Me {
     email_completed: boolean;
     email_due_today: boolean;
     essential_only: boolean;
+    push_enabled: boolean;
   };
   emailConfigured: boolean;
   unreadCount: number;

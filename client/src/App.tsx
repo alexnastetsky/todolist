@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Skeleton } from '@databricks/appkit-ui/react';
 import { api, type Me, type Person } from './lib/api';
 import { AppContext } from './AppContext';
+import { useOnline } from './lib/useOnline';
 import { NotificationBell } from './components/NotificationBell';
 import { TodayPage } from './pages/TodayPage';
 import { ListsPage } from './pages/ListsPage';
@@ -14,7 +15,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { TaskPage } from './pages/TaskPage';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+  `px-3 py-1.5 max-sm:py-2.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
     isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
   }`;
 
@@ -22,6 +23,7 @@ function Root() {
   const [me, setMe] = useState<Me | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const online = useOnline();
 
   const refreshMe = useCallback(() => {
     api
@@ -54,8 +56,10 @@ function Root() {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
-          <p className="font-medium">Could not load Todos</p>
-          <p className="text-sm text-muted-foreground mt-1">{error}</p>
+          <p className="font-medium">{online ? 'Could not load Todos' : "You're offline"}</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {online ? error : 'Todos needs a connection to load your lists.'}
+          </p>
           <button
             type="button"
             className="mt-3 px-3 py-1.5 rounded-md border text-sm font-medium hover:bg-muted transition-colors"
@@ -83,7 +87,7 @@ function Root() {
 
   return (
     <AppContext.Provider value={{ me, people, refreshMe, refreshPeople }}>
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="min-h-screen bg-background flex flex-col app-safe-area">
         <header className="border-b px-3 md:px-6 py-2.5 md:py-3 flex items-center gap-x-3 sticky top-0 bg-background z-10">
           <h1 className="text-base md:text-lg font-semibold text-foreground shrink-0">
             <Link to="/" className="hover:opacity-80 transition-opacity">
@@ -111,6 +115,14 @@ function Root() {
             </NavLink>
           </div>
         </header>
+        {!online && (
+          <p
+            role="status"
+            className="px-3 md:px-6 py-1.5 text-xs font-medium text-center bg-muted text-muted-foreground border-b"
+          >
+            {"Offline — changes can't be saved right now."}
+          </p>
+        )}
         <main className="flex-1 w-full max-w-3xl mx-auto px-3 md:px-6 py-4 pb-16">
           <Outlet />
         </main>

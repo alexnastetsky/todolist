@@ -10,6 +10,12 @@
   "theme_color": "#18181b",
   "icons": [
     {
+      "src": "/todolist/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/todolist/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
@@ -26,24 +32,36 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/todolist/screenshots/narrow.png",
+      "sizes": "412x915",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Today's plan"
     },
     {
-      "src": "/todolist/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "/todolist/screenshots/wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Today's plan"
     }
   ],
   "shortcuts": [
     {
       "name": "Today",
       "short_name": "Today",
-      "url": "/todolist/"
+      "url": "/todolist/",
+      "icons": [{ "src": "/todolist/icons/icon-96.png", "sizes": "96x96", "type": "image/png" }]
     },
     {
       "name": "Lists",
       "short_name": "Lists",
-      "url": "/todolist/lists"
+      "url": "/todolist/lists",
+      "icons": [{ "src": "/todolist/icons/icon-96.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]
 }

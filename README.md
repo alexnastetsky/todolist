@@ -51,7 +51,6 @@ in `home`. The public copies must simply be byte-identical and reachable.
 first install: Chrome re-reads the manifest roughly daily and re-mints the
 WebAPK when it changes, re-fetching the icons each time. A dead URL means a
 broken launcher icon weeks later, with nothing to connect it to the cause.
-They currently point at a Cloudflare Worker whose hostname includes its
-auto-generated project name (`blue-mouse-5f1e`), so **renaming or recreating
-that Worker will break them**. Moving them to `alexalot.com` once its custom
-domain resolves would remove that footgun.
+They are served from `alexalot.com`, a Cloudflare Worker holding nothing but
+these four files. Re-upload them there whenever the generator is re-run — the
+manifest points at those copies, and nothing enforces that the two stay in sync.
